@@ -3,6 +3,8 @@ use crate::global::*;
 #[derive(serde::Deserialize, serde::Serialize)]
 struct SocketJsonMessageContentOnSubmissionsList {
     index: i64,
+    #[serde(default)]
+    username: String,
     request_key: String,
 }
 
@@ -29,6 +31,7 @@ pub async fn on_submissions_list(msg: SocketJsonMessageWithWsId) {
             PendingSubmissionsListRequest {
                 requester_ws_id: msg.ws_id.clone(),
                 page_index: content.index,
+                username_filter: content.username.trim().to_string(),
                 original_request_key: content.request_key,
             }
         );

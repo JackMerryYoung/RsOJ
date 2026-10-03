@@ -112,6 +112,7 @@ pub async fn get_db_conn() -> Result<mysql_async::Conn, mysql_async::Error> {
 pub struct PendingSubmissionsListRequest {
     pub requester_ws_id: String,
     pub page_index: i64,
+    pub username_filter: String,
     pub original_request_key: String,
 }
 

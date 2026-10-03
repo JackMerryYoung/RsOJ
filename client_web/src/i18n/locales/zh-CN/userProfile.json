@@ -12,5 +12,41 @@
     "acceptedLabel": "已通过：{{count}}",
     "testAcceptedLabel": "测试通过：{{count}}",
     "generalLabel": "总计：{{count}}",
+    "statsLabel": "用户统计",
+    "acceptedStatLabel": "已通过",
+    "testAcceptedStatLabel": "测试通过",
+    "generalStatLabel": "提交总数",
+    "loading": "正在加载个人资料...",
+    "loadFailed": "无法加载该个人资料，请检查用户名和网络连接。",
+    "chart": {
+        "title": "做题量趋势（AC 提交）",
+        "collapse": "收起做题量趋势",
+        "expand": "展开做题量趋势",
+        "acceptedCount": "通过提交数",
+        "submissionsSuffix": "次",
+        "noData": "暂无通过提交记录。",
+        "granularityLabel": "统计粒度",
+        "granularity": {
+            "day": "按日",
+            "month": "按月",
+            "year": "按年"
+        }
+    },
+    "acceptedProblems": {
+        "title": "已通过题目",
+        "collapse": "收起已通过题目",
+        "expand": "展开已通过题目",
+        "sortLabel": "已通过题目排序",
+        "sort": {
+            "number": "按题号",
+            "time": "按首次通过时间",
+            "difficulty": "按难度"
+        },
+        "problemNumber": "题号",
+        "problemName": "题目名称",
+        "difficulty": "难度",
+        "firstAcceptedAt": "首次通过时间",
+        "empty": "暂无已通过题目。"
+    },
     "pleaseLoginFirst": "请先登录。"
 }

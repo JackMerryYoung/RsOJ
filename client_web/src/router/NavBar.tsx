@@ -105,7 +105,9 @@ export default function NavBar({ request }: {
                             <Tab onClick={() => onTabSelect("register")} style={{ float: "right" }} value="register" icon={<PersonAddFilled />}>{t("tab.signUp")}</Tab>
                         </>
                 }
-                <LanguageSwitcher style={{ float: "right" }} />
+                <div style={{ float: "right", display: "flex", alignItems: "center", marginTop: "11px", marginRight: "10px" }}>
+                    <LanguageSwitcher className="navbar-language-switcher" />
+                </div>
 
                 <Divider />
             </div>

@@ -45,7 +45,8 @@ pub extern "Rust" fn on_init(
     // Initialization
     {
         let ws_server_status: AsyncModifiable<ModuleStatus> = ws_server_status.clone();
-        ws_server_runtime.spawn(async move {
+        let failure_status = ws_server_status.clone();
+        let initialization_handle = ws_server_runtime.spawn(async move {
             // Try to load config file.
             let mut ws_server_config_json_string: String = String::new();
             let ws_server_config_json_file_path: String =
@@ -87,8 +88,9 @@ pub extern "Rust" fn on_init(
                         ModuleStatus
                     > = ws_server_status.lock().await;
                     guard_ws_server_status.panicked = true;
+                    guard_ws_server_status.init_notify.notify_waiters();
                     drop(guard_ws_server_status); // Avoid poisoning the mutex lock.
-                    panic!();
+                    return;
                 }
             };
             ws_server_config_json_file.read_to_string(&mut ws_server_config_json_string).unwrap();
@@ -241,9 +243,11 @@ pub extern "Rust" fn on_init(
                                 .layer(axum::middleware::from_fn(crate::ws_handler::ip_handler))
                         )
                 );
+            // A previous instance may still be releasing 9983 during a graceful restart.
+            // Keep retrying briefly instead of failing the whole module immediately.
             let listener: Result<tokio::net::TcpListener, std::io::Error> = retry!(
                 tokio::net::TcpListener::bind("0.0.0.0:9983").await,
-                2,
+                20,
                 1000,
                 {
                     println!(
@@ -308,14 +312,27 @@ pub extern "Rust" fn on_init(
                         ModuleStatus
                     > = ws_server_status.lock().await;
                     guard_ws_server_status.panicked = true;
+                    guard_ws_server_status.init_notify.notify_waiters();
                     drop(guard_ws_server_status); // Avoid poisoning the mutex lock.
-                    panic!();
+                    return;
                 }
             };
             axum::serve(
                 listener,
                 ws_server_app.into_make_service_with_connect_info::<std::net::SocketAddr>()
             ).await.unwrap();
+        });
+
+        // Detached initialization tasks used to leave main_backend waiting forever when an
+        // unexpected panic occurred before `initialized` was set. Convert a join failure into a
+        // visible module failure and wake every waiter.
+        ws_server_runtime.spawn(async move {
+            if let Err(error) = initialization_handle.await {
+                eprintln!("[{}] [ERROR] initialization task failed: {}", MODULE_IDENTITY, error);
+                let mut status = failure_status.lock().await;
+                status.panicked = true;
+                status.init_notify.notify_waiters();
+            }
         });
     }
 

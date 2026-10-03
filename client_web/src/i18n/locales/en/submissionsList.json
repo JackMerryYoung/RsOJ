@@ -2,7 +2,9 @@
     "failedToFetch": "Failed to fetch the submission list.",
     "waiting": "Waiting...",
     "field": {
-        "submissionId": "Submission ID"
+        "submissionId": "Submission ID",
+        "username": "Username",
+        "usernamePlaceholder": "Filter by username"
     },
     "action": {
         "jumpTo": "Jump to",
@@ -16,6 +18,7 @@
     "ownSubmission": "My submission",
     "column": {
         "submissionId": "Submission ID",
+        "username": "Username",
         "problemNumber": "Problem Number",
         "status": "Status",
         "score": "Score"

@@ -2,6 +2,12 @@ a {
   text-decoration: none;
 }
 
+/* Match the language selector's border to the navigation text line instead of the taller
+   default field padding used by Fluent UI's medium Dropdown. */
+.navbar-language-switcher .fui-Dropdown__button {
+  padding-block: 0;
+}
+
 /* One scrollbar style for the whole app: thin, translucent thumb, no (white) track. Both properties
    are inherited, so this is the baseline for every scrollable element (textareas, panels, lists);
    the big content regions (.scroll-box / the submissions table) override it to hide the thumb until

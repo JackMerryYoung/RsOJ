@@ -52,8 +52,9 @@ pub async fn serve(control_panel_status: AsyncModifiable<ModuleStatus>) {
         let mut guard_control_panel_status: tokio::sync::MutexGuard<'_, ModuleStatus> =
             control_panel_status.lock().await;
         guard_control_panel_status.panicked = true;
+        guard_control_panel_status.init_notify.notify_waiters();
         drop(guard_control_panel_status); // Avoid poisoning the mutex lock.
-        panic!();
+        return;
     }
 
     if !control_panel_is_configured() {
@@ -173,8 +174,9 @@ pub async fn serve(control_panel_status: AsyncModifiable<ModuleStatus>) {
                     let mut guard_control_panel_status: tokio::sync::MutexGuard<'_, ModuleStatus> =
                         control_panel_status.lock().await;
                     guard_control_panel_status.panicked = true;
+                    guard_control_panel_status.init_notify.notify_waiters();
                     drop(guard_control_panel_status); // Avoid poisoning the mutex lock.
-                    panic!();
+                    return;
                 }
                 http_port += 1;
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;

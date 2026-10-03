@@ -662,7 +662,15 @@ async fn load_modules(
                     notified.as_mut().enable();
                     let already_initialized: bool = status.lock().await.initialized;
                     if !already_initialized {
-                        notified.await;
+                        if tokio::time::timeout(
+                            std::time::Duration::from_secs(30),
+                            notified.as_mut(),
+                        ).await.is_err() {
+                            panic!("module `{}` initialization timed out", module_name);
+                        }
+                    }
+                    if status.lock().await.panicked {
+                        panic!("module `{}` initialization failed", module_name);
                     }
                     let module_socket_port: u16 = {
                         let guard_status: tokio::sync::MutexGuard<'_, ModuleStatus> =
@@ -773,7 +781,10 @@ fn unload_module_combinations(
     }
 
     // Phase 2: dependencies are loaded before dependants, so stop runtimes in reverse order.
-    // Any task that did not finish in phase 1 is force-cancelled after its configured timeout.
+    // Long-lived socket accept loops do not observe a cooperative cancellation signal, so
+    // shutdown_timeout would wait the configured 5 seconds for every module. The phase-1 hooks
+    // already perform the bounded cleanup; drop each runtime in the background here so process
+    // shutdown is not serialized behind those accept loops.
     for module in modules.into_iter().rev() {
         let unload_timeout: usize = module_config_json.working_load
             .get(&module.name)
@@ -783,7 +794,7 @@ fn unload_module_combinations(
             "{}",
             ansi_term::Color::Blue.paint(
                 format!(
-                    "[MAIN_BACKEND] [INFO] [THREAD {}] [FILE `{}` LINE {}] Shutting down the Tokio runtime of module `{}` (timeout {}ms).",
+                    "[MAIN_BACKEND] [INFO] [THREAD {}] [FILE `{}` LINE {}] Releasing the Tokio runtime of module `{}` without waiting (cleanup timeout {}ms).",
                     std::thread::current().id().as_u64(),
                     file!(),
                     line!(),
@@ -792,9 +803,6 @@ fn unload_module_combinations(
                 )
             )
         );
-        // Bound the wait for the module's spawned tasks to finish; force-cancel anything still running past the timeout.
-        module.tokio_runtime.shutdown_timeout(
-            std::time::Duration::from_millis(unload_timeout as u64)
-        );
+        module.tokio_runtime.shutdown_background();
     }
 }

@@ -33,10 +33,19 @@ pub extern "Rust" fn on_init(
         simple_authenticator_status
     );
     {
-        let simple_authenticator_status: AsyncModifiable<ModuleStatus> =
-            simple_authenticator_status.clone();
-        simple_authenticator_runtime.spawn(async move {
-            let mut conn: mysql_async::Conn = MYSQL_DATABASE_POOL.get_conn().await.unwrap();
+        let initialization_status: AsyncModifiable<ModuleStatus> = simple_authenticator_status.clone();
+        let initialization_handle = simple_authenticator_runtime.spawn(async move {
+            let simple_authenticator_status = initialization_status;
+            let mut conn: mysql_async::Conn = match MYSQL_DATABASE_POOL.get_conn().await {
+                Ok(conn) => conn,
+                Err(error) => {
+                    eprintln!("[{}] [ERROR] database initialization failed: {}", MODULE_IDENTITY, error);
+                    let mut status = simple_authenticator_status.lock().await;
+                    status.panicked = true;
+                    status.init_notify.notify_waiters();
+                    return;
+                }
+            };
             let tmp: Vec<String> = conn.query("SHOW DATABASES LIKE \'RsOJ\'").await.unwrap();
             if !tmp.iter().any(|x| x == "RsOJ") {
                 "CREATE DATABASE RsOJ".ignore(&mut conn).await.unwrap();
@@ -189,6 +198,22 @@ pub extern "Rust" fn on_init(
             guard_simple_authenticator_status.init_notify.notify_waiters();
             drop(guard_simple_authenticator_status);
         });
+
+        // A panic in database/schema initialization used to leave the main loader waiting
+        // forever. Convert the detached task failure into an explicit module failure.
+        let failure_status = simple_authenticator_status.clone();
+        simple_authenticator_runtime.spawn(async move {
+            if let Err(error) = initialization_handle.await {
+                eprintln!(
+                    "[{}] [ERROR] initialization task failed: {}",
+                    MODULE_IDENTITY,
+                    error
+                );
+                let mut status = failure_status.lock().await;
+                status.panicked = true;
+                status.init_notify.notify_waiters();
+            }
+        });
     }
 
     {
@@ -217,10 +242,27 @@ pub extern "Rust" fn on_init(
     }
 
     {
+        let initialization_status = simple_authenticator_status.clone();
         simple_authenticator_runtime.spawn(async move {
+            // Do not start looking for ws_server until this module's own initialization has
+            // completed. If database setup failed, the supervisor marks the module as panicked
+            // and this task exits instead of printing a misleading wait message forever.
+            let init_notify = initialization_status.lock().await.init_notify.clone();
+            let notified = init_notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let already_initialized = initialization_status.lock().await.initialized;
+            if !already_initialized {
+                notified.await;
+            }
+            if initialization_status.lock().await.panicked {
+                return;
+            }
+
             // ws_server doesn't necessarily exist in the map yet (it may not have been loaded by
-            // main_backend at all), so there's no event to wait on for that — poll until it
-            // registers itself.
+            // main_backend at all), so poll until it registers itself. Log this only once because
+            // Tokio may resume the same task on different worker threads.
+            let mut waiting_logged = false;
             let ws_server_status: AsyncModifiable<ModuleStatus> = loop {
                 let guard_global_module_statuses_by_protocol =
                     global_module_statuses_by_protocol.lock().await;
@@ -233,18 +275,21 @@ pub extern "Rust" fn on_init(
                     break ws_server_status;
                 }
                 drop(guard_global_module_statuses_by_protocol);
-                println!(
-                    "{}",
-                    ansi_term::Color::Blue.paint(
-                        format!(
-                            "[{}] [INFO] [THREAD {}] [FILE `{}` LINE {}] Waiting for the Websocket server to be initialized...",
-                            MODULE_IDENTITY,
-                            std::thread::current().id().as_u64(),
-                            file!(),
-                            line!()
+                if !waiting_logged {
+                    println!(
+                        "{}",
+                        ansi_term::Color::Blue.paint(
+                            format!(
+                                "[{}] [INFO] [THREAD {}] [FILE `{}` LINE {}] Waiting for the Websocket server to be initialized...",
+                                MODULE_IDENTITY,
+                                std::thread::current().id().as_u64(),
+                                file!(),
+                                line!()
+                            )
                         )
-                    )
-                );
+                    );
+                    waiting_logged = true;
+                }
                 tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
             };
             // Now that ws_server is registered, wait for it to finish initializing — notified

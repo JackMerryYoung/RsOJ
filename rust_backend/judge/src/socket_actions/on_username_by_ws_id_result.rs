@@ -11,6 +11,7 @@ struct ContentOnUsernameByWsIdResult {
 #[derive(serde::Serialize)]
 struct SubmissionResultOwn {
     submission_id: i64,
+    username: String,
     result: String,
     general_score: i32,
     statuses: Vec<String>,
@@ -21,6 +22,7 @@ struct SubmissionResultOwn {
 #[derive(serde::Serialize)]
 struct SubmissionResultOthers {
     submission_id: i64,
+    username: String,
     result: String,
     problem_number: i64,
 }
@@ -201,15 +203,28 @@ pub async fn on_username_by_ws_id_result(msg: SocketJsonMessage) {
             Vec<(i64, String, i64, String, i32, String, String)>,
             mysql_async::Error,
         >;
-        let results: SubmissionResultType = conn
-            .exec(
+        let results: SubmissionResultType = if pending_request.username_filter.is_empty() {
+            conn.exec(
                 "SELECT submission_id, username, problem_number, result, general_score, statuses, scores
                 FROM RsOJ.submissions
                 ORDER BY submission_id DESC
                 LIMIT :limit OFFSET :offset",
                 mysql_async::params! { "limit" => SUBMISSIONS_LIST_PAGE_SIZE, "offset" => offset }
-            )
-            .await;
+            ).await
+        } else {
+            conn.exec(
+                "SELECT submission_id, username, problem_number, result, general_score, statuses, scores
+                FROM RsOJ.submissions
+                WHERE username = :username
+                ORDER BY submission_id DESC
+                LIMIT :limit OFFSET :offset",
+                mysql_async::params! {
+                    "username" => &pending_request.username_filter,
+                    "limit" => SUBMISSIONS_LIST_PAGE_SIZE,
+                    "offset" => offset,
+                }
+            ).await
+        };
         drop(conn);
 
         match results {
@@ -232,6 +247,7 @@ pub async fn on_username_by_ws_id_result(msg: SocketJsonMessage) {
                                 serde_json
                                     ::to_value(SubmissionResultOwn {
                                         submission_id,
+                                        username,
                                         result,
                                         general_score,
                                         statuses: serde_json
@@ -245,6 +261,7 @@ pub async fn on_username_by_ws_id_result(msg: SocketJsonMessage) {
                                 serde_json
                                     ::to_value(SubmissionResultOthers {
                                         submission_id,
+                                        username,
                                         result,
                                         problem_number,
                                     })

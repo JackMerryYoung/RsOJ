@@ -48,6 +48,7 @@ const useStyles = makeStyles({
 });
 interface SubmissionResult {
     submission_id: number;
+    username: string;
     result: string;
     general_score: number;
     statuses: string[];
@@ -57,6 +58,7 @@ interface SubmissionResult {
 
 interface SubmissionResultOthers {
     submission_id: number;
+    username: string;
     result: string;
     problem_number: number;
 }
@@ -69,7 +71,8 @@ function isSubmissionResultOwn(submission: SubmissionListItem): submission is Su
 
 function useSubmissionsList(
     request: globals.WebSocketRequest,
-    setElapsedTime: React.Dispatch<React.SetStateAction<number>>
+    setElapsedTime: React.Dispatch<React.SetStateAction<number>>,
+    username: string,
 ) {
     const [submissionsList, setSubmissionsList] = useState<SubmissionListItem[] | undefined>(undefined);
 
@@ -88,11 +91,10 @@ function useSubmissionsList(
     }, []);
 
     const loadSubmissionsList = useCallback(async (_submissionsListIndex: number, signal?: AbortSignal) => {
-        setSubmissionsList(undefined);
         try {
             const response = await request<{ type: string; content: { request_key: string; submissions_list?: SubmissionListItem[] } }>(
                 "submissions_list",
-                { index: _submissionsListIndex },
+                { index: _submissionsListIndex, username },
                 { signal },
             );
             if (response.content.submissions_list) {
@@ -101,13 +103,14 @@ function useSubmissionsList(
         } catch (error) {
             if (error instanceof Error && error.name === "AbortError") return;
         }
-    }, [request]);
+    }, [request, username]);
 
     return { submissionsList, loadSubmissionsList };
 }
 
 function useTotalSubmissionsListIndex(
-    request: globals.WebSocketRequest
+    request: globals.WebSocketRequest,
+    username: string,
 ) {
     const [totalSubmissionsListIndex, setTotalSubmissionsListIndex] = useState(1);
 
@@ -115,7 +118,7 @@ function useTotalSubmissionsListIndex(
         try {
             const response = await request<{ type: string; content: { request_key: string; total_submissions_list_index?: number } }>(
                 "total_submissions_list_index",
-                {},
+                { username },
                 { signal },
             );
             if (response.content.total_submissions_list_index !== undefined) {
@@ -124,7 +127,7 @@ function useTotalSubmissionsListIndex(
         } catch (error) {
             if (error instanceof Error && error.name === "AbortError") return;
         }
-    }, [request]);
+    }, [request, username]);
 
     return { totalSubmissionsListIndex, loadTotalSubmissionsListIndex };
 }
@@ -133,10 +136,12 @@ export default function SubmissionsList() {
     const [elapsedTime, setElapsedTime] = useState(0);
     const { request } = useOutletContext<globals.WebSocketHook>();
     const [submissionId, setSubmissionId] = useState("-1");
+    const [username, setUsername] = useState("");
     const [submissionsListIndex, setSubmissionsListIndex] = useState(1);
     const loginStatus = useSelector((state: RootState) => state.loginStatus);
-    const { totalSubmissionsListIndex, loadTotalSubmissionsListIndex } = useTotalSubmissionsListIndex(request)
-    const { submissionsList, loadSubmissionsList } = useSubmissionsList(request, setElapsedTime)
+    const normalizedUsername = username.trim();
+    const { totalSubmissionsListIndex, loadTotalSubmissionsListIndex } = useTotalSubmissionsListIndex(request, normalizedUsername)
+    const { submissionsList, loadSubmissionsList } = useSubmissionsList(request, setElapsedTime, normalizedUsername)
     const navigate = useNavigate();
     const location = useLocation();
     const rootStyle = useStyles().root;
@@ -177,7 +182,17 @@ export default function SubmissionsList() {
                     <>
                         <div className={rootStyle}>
                             <form style={{ padding: "0 0.9em" }}>
-                                <Field label={t("field.submissionId")}>
+                                <Field label={t("field.username")}>
+                                    <Input
+                                        value={username}
+                                        onChange={(_event, data) => {
+                                            setUsername(data.value);
+                                            setSubmissionsListIndex(1);
+                                        }}
+                                        placeholder={t("field.usernamePlaceholder")}
+                                        style={{ width: "100%" }} />
+                                </Field>
+                                <Field label={t("field.submissionId")} style={{ marginTop: "0.5em" }}>
                                     <div style={{ display: "flex", columnGap: "0.25em" }}>
                                         <Input onChange={(props) => setSubmissionId(props.target.value)} style={{ flex: "75%" }} />
                                         <Button size="medium" appearance="primary"
@@ -210,17 +225,18 @@ export default function SubmissionsList() {
                             <Table size="medium" className="scroll-bar-wrap" style={{ width: "100%" }}>
                                 <TableHeader className="my-table-sticky">
                                     <TableRow className="my-table-row-header">
-                                        <TableHeaderCell style={{ width: "25%" }} className="my-table-cell">{t("column.submissionId")}</TableHeaderCell>
-                                        <TableHeaderCell style={{ width: "25%" }}>{t("column.problemNumber")}</TableHeaderCell>
-                                        <TableHeaderCell style={{ width: "25%" }}>{t("column.status")}</TableHeaderCell>
-                                        <TableHeaderCell style={{ width: "25%" }}>{t("column.score")}</TableHeaderCell>
+                                        <TableHeaderCell style={{ width: "20%" }} className="my-table-cell">{t("column.submissionId")}</TableHeaderCell>
+                                        <TableHeaderCell style={{ width: "20%" }}>{t("column.username")}</TableHeaderCell>
+                                        <TableHeaderCell style={{ width: "20%" }}>{t("column.problemNumber")}</TableHeaderCell>
+                                        <TableHeaderCell style={{ width: "20%" }}>{t("column.status")}</TableHeaderCell>
+                                        <TableHeaderCell style={{ width: "20%" }}>{t("column.score")}</TableHeaderCell>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody className="my-table-scrollbar">
                                     {
                                         submissionsList.map((submissionResult: SubmissionResult | SubmissionResultOthers) => (
                                             <TableRow key={submissionResult.submission_id} className="my-table-row-body" style={{ backgroundColor: location.pathname === "/submission/" + submissionResult.submission_id ? "#f0f6ff" : undefined }}>
-                                                <TableCell style={{ color: "#4183C4", width: "25%" }} className="my-table-cell"
+                                                <TableCell style={{ color: "#4183C4", width: "20%" }} className="my-table-cell"
                                                     onMouseEnter={(e) => { (e.target as HTMLTableCellElement).style.color = "#0056B3"; (e.target as HTMLTableCellElement).style.cursor = "pointer"; }}
                                                     onMouseLeave={(e) => { (e.target as HTMLTableCellElement).style.color = "#4183C4"; (e.target as HTMLTableCellElement).style.cursor = "default"; }}
                                                     onClick={() => { navigate("/submission/" + String(submissionResult.submission_id)); }}>
@@ -234,14 +250,17 @@ export default function SubmissionsList() {
                                                         {submissionResult.submission_id}
                                                     </span>
                                                 </TableCell>
-                                                <TableCell style={{ color: "#4183C4", width: "25%" }} className="my-table-cell"
+                                                <TableCell style={{ width: "20%" }} className="my-table-cell">
+                                                    {submissionResult.username}
+                                                </TableCell>
+                                                <TableCell style={{ color: "#4183C4", width: "20%" }} className="my-table-cell"
                                                     onMouseEnter={(e) => { (e.target as HTMLTableCellElement).style.color = "#0056B3"; (e.target as HTMLTableCellElement).style.cursor = "pointer"; }}
                                                     onMouseLeave={(e) => { (e.target as HTMLTableCellElement).style.color = "#4183C4"; (e.target as HTMLTableCellElement).style.cursor = "default"; }}
                                                     onClick={() => { navigate("/problem/" + String(submissionResult.problem_number)); }}>
                                                     {submissionResult.problem_number}
                                                 </TableCell>
-                                                <TableCell style={{ color: getColorByResult('result' in submissionResult ? submissionResult.result : "PD"), width: "25%" }} className="my-table-cell">{'result' in submissionResult ? submissionResult.result : "PD"}</TableCell>
-                                                <TableCell style={{ color: isSubmissionResultOwn(submissionResult) ? getColorByScore(submissionResult.general_score) : undefined, width: "25%" }} className="my-table-cell">{isSubmissionResultOwn(submissionResult) ? submissionResult.general_score : "-"}</TableCell>
+                                                <TableCell style={{ color: getColorByResult('result' in submissionResult ? submissionResult.result : "PD"), width: "20%" }} className="my-table-cell">{'result' in submissionResult ? submissionResult.result : "PD"}</TableCell>
+                                                <TableCell style={{ color: isSubmissionResultOwn(submissionResult) ? getColorByScore(submissionResult.general_score) : undefined, width: "20%" }} className="my-table-cell">{isSubmissionResultOwn(submissionResult) ? submissionResult.general_score : "-"}</TableCell>
                                             </TableRow>
                                         )
                                         )

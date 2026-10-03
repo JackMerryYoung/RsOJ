@@ -12,5 +12,41 @@
     "acceptedLabel": "Accepted: {{count}}",
     "testAcceptedLabel": "Test Accepted: {{count}}",
     "generalLabel": "General: {{count}}",
+    "statsLabel": "User statistics",
+    "acceptedStatLabel": "Accepted",
+    "testAcceptedStatLabel": "Test accepted",
+    "generalStatLabel": "Total submissions",
+    "loading": "Loading profile...",
+    "loadFailed": "Unable to load this profile. Please check the username and connection.",
+    "chart": {
+        "title": "Problem-solving trend (AC submissions)",
+        "collapse": "Collapse problem-solving trend",
+        "expand": "Expand problem-solving trend",
+        "acceptedCount": "Accepted submissions",
+        "submissionsSuffix": "submissions",
+        "noData": "No accepted submissions yet.",
+        "granularityLabel": "Chart granularity",
+        "granularity": {
+            "day": "Daily",
+            "month": "Monthly",
+            "year": "Yearly"
+        }
+    },
+    "acceptedProblems": {
+        "title": "Passed problems",
+        "collapse": "Collapse passed problems",
+        "expand": "Expand passed problems",
+        "sortLabel": "Sort passed problems",
+        "sort": {
+            "number": "Problem number",
+            "time": "First accepted time",
+            "difficulty": "Difficulty"
+        },
+        "problemNumber": "Problem number",
+        "problemName": "Problem name",
+        "difficulty": "Difficulty",
+        "firstAcceptedAt": "First accepted",
+        "empty": "No passed problems yet."
+    },
     "pleaseLoginFirst": "Please login first."
 }

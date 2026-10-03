@@ -2,7 +2,9 @@
     "failedToFetch": "获取提交列表失败。",
     "waiting": "等待中...",
     "field": {
-        "submissionId": "提交 ID"
+        "submissionId": "提交 ID",
+        "username": "用户名",
+        "usernamePlaceholder": "按用户名筛选"
     },
     "action": {
         "jumpTo": "跳转到",
@@ -16,6 +18,7 @@
     "ownSubmission": "我的提交",
     "column": {
         "submissionId": "提交 ID",
+        "username": "提交用户",
         "problemNumber": "题目编号",
         "status": "状态",
         "score": "分数"

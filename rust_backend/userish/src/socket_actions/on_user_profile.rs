@@ -16,11 +16,25 @@ struct ContentInUserProfileResult {
     accepted: i32,
     test_accepted: i32,
     general: i32,
+    /// Unix timestamps for accepted submissions by this user.  The frontend groups these
+    /// into day/month/year buckets so the same response can power all chart granularities.
+    accepted_submission_timestamps: Vec<i64>,
+    /// One entry per problem with at least one non-test AC, including the first AC timestamp
+    /// and the problem metadata needed by the profile's sort controls.
+    accepted_problems: Vec<AcceptedProblem>,
     #[serde(skip_serializing_if = "Option::is_none")]
     is_following: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     is_followed_by: Option<bool>,
     request_key: String,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct AcceptedProblem {
+    problem_number: i64,
+    problem_name: String,
+    difficulty: i32,
+    first_accepted_at: i64,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -35,13 +49,62 @@ pub async fn on_user_profile(msg: SocketJsonMessageWithWsId) {
             msg.content
         )
     {
-        let mut conn: mysql_async::Conn = get_db_conn().await.unwrap();
+        let mut conn: mysql_async::Conn = match get_db_conn().await {
+            Ok(conn) => conn,
+            Err(error) => {
+                eprintln!(
+                    "[{}] Failed to open the database connection while loading profile `{}`: {}",
+                    MODULE_IDENTITY,
+                    content.username,
+                    error
+                );
+                return;
+            }
+        };
         let results: Result<Vec<(i32, i32, i32)>, _> = conn
             .exec(
                 "SELECT accepted, test_accepted, general FROM RsOJ.users WHERE username = :username",
                 mysql_async::params! { "username" => &content.username }
             )
             .await;
+
+        let accepted_submission_timestamps: Vec<i64> = conn
+            .exec(
+                "SELECT created_at FROM RsOJ.submissions
+                 WHERE username = :username
+                   AND result = 'AC'
+                   AND is_test_submission_mode = FALSE
+                 ORDER BY created_at ASC, submission_id ASC",
+                mysql_async::params! { "username" => &content.username }
+            )
+            .await
+            .unwrap_or_default();
+
+        let accepted_problems: Vec<AcceptedProblem> = conn
+            .exec(
+                "SELECT s.problem_number,
+                        COALESCE(MAX(p.problem_name), ''),
+                        COALESCE(MAX(p.difficulty), 0),
+                        MIN(s.created_at)
+                 FROM RsOJ.submissions AS s
+                 LEFT JOIN RsOJ.problems AS p ON p.problem_number = s.problem_number
+                 WHERE s.username = :username
+                   AND s.result = 'AC'
+                   AND s.is_test_submission_mode = FALSE
+                 GROUP BY s.problem_number
+                 ORDER BY s.problem_number ASC",
+                mysql_async::params! { "username" => &content.username }
+            )
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(problem_number, problem_name, difficulty, first_accepted_at)| AcceptedProblem {
+                problem_number,
+                problem_name,
+                difficulty,
+                first_accepted_at,
+            })
+            .collect();
 
         let (is_following, is_followed_by) = match &content.viewer_username {
             Some(viewer_username) if viewer_username != &content.username => {
@@ -76,6 +139,8 @@ pub async fn on_user_profile(msg: SocketJsonMessageWithWsId) {
                             accepted,
                             test_accepted,
                             general,
+                            accepted_submission_timestamps,
+                            accepted_problems,
                             is_following,
                             is_followed_by,
                             request_key: content.request_key,

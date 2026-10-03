@@ -4,6 +4,8 @@ use mysql_async::prelude::*;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct SocketJsonMessageContentOnTotalSubmissionsListIndex {
+    #[serde(default)]
+    username: String,
     request_key: String,
 }
 
@@ -26,9 +28,14 @@ pub async fn on_total_submissions_list_index(msg: SocketJsonMessageWithWsId) {
         >(msg.content)
     {
         let mut conn: mysql_async::Conn = get_db_conn().await.unwrap();
-        let results: Result<Vec<i64>, _> = conn
-            .query("SELECT COUNT(*) FROM RsOJ.submissions")
-            .await;
+        let results: Result<Vec<i64>, _> = if content.username.trim().is_empty() {
+            conn.query("SELECT COUNT(*) FROM RsOJ.submissions").await
+        } else {
+            conn.exec(
+                "SELECT COUNT(*) FROM RsOJ.submissions WHERE username = :username",
+                mysql_async::params! { "username" => content.username.trim() },
+            ).await
+        };
         drop(conn);
 
         match results {
